@@ -12,8 +12,8 @@ GitHub Pages untuk Privacy Policy dan Terms of Use.
 ## URL akan jadi:
 
 ```
-https://[username].github.io/[repo-name]/privacy.html
-https://[username].github.io/[repo-name]/terms.html
+https://Megarock-Programme.github.io/pages/privacy.html
+https://Megarock-Programme.github.io/pages/terms.html
 ```
 
 ## Untuk Notion OAuth Integration
@@ -21,11 +21,3 @@ https://[username].github.io/[repo-name]/terms.html
 Gunakan URL di atas untuk:
 - Privacy Policy URL
 - Terms of Use URL
-
-## Update Content
-
-Edit file `privacy.html` dan `terms.html` sesuai kebutuhan:
-- Ganti `[DATE]` dengan tanggal actual
-- Ganti `[Company Name]` dengan nama perusahaan
-- Ganti `[email]` dengan email support
-- Ganti `[Your Company Address]` dengan alamat
