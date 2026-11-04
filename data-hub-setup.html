@@ -201,7 +201,37 @@ GRANT USE SCHEMA, SELECT ON CATALOG &lt;catalog&gt; TO `&lt;principal&gt;`;</cod
     </ol>
     <p>A stopped warehouse starts on the first query; expect the first <em>Test</em> to take up to a minute.</p>
 
-    <h2>8. Connect and choose who reads it</h2>
+    <h2>8. Qdrant (knowledge)</h2>
+    <p>
+        A knowledge source is searched by meaning, not SQL. Megabots embeds each question with a
+        Bedrock model and asks Qdrant for the nearest chunks, so the collection must have been built
+        with the <strong>same model and vector size</strong>. <em>Test</em> refuses a size that does
+        not match the collection. Supported: Titan Text Embeddings V2 (1024/512/256), Cohere Embed
+        Multilingual v3 (1024), Cohere Embed v4 (1536/1024/512/256). A collection embedded with
+        another model (OpenAI, a local model) cannot be connected yet.
+    </p>
+    <ol>
+        <li>
+            Create a read-only API key. In Qdrant Cloud: <em>Access management → Database API keys →
+            Create</em>, role <strong>Read only</strong>, scoped to the collection if you like.
+        </li>
+        <li>
+            Note the payload keys that hold each chunk's text (required), and optionally its title
+            and a source URL or document name. Megabots samples twenty points on connect and lists
+            every payload key as a filterable field.
+        </li>
+        <li>
+            In the connect form give the endpoint (<code>https://xxxx.cloud.qdrant.io:6333</code>; a
+            plain <code>http://</code> address means a local server), the API key, the collection,
+            the embedding model and size, and the field names.
+        </li>
+    </ol>
+    <p>
+        Megabots never writes to the collection. Bedrock knowledge bases are managed in
+        <em>Settings → Knowledge Base</em>, not here.
+    </p>
+
+    <h2>9. Connect and choose who reads it</h2>
     <p>
         <em>Data Hub → Connect source</em>, paste the URL, <em>Test connection</em>, then under
         <em>Who can read it?</em> pick the roles. The default is nobody but admins. Use the
