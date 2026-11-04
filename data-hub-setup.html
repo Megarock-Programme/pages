@@ -93,6 +93,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA &lt;schema&gt; GRANT SELECT ON TABLES TO mega
             first connection. <em>Test connection</em> waits for it.
         </li>
     </ul>
+    <p>
+        A connection that <em>times out</em> usually means the firewall is dropping the request, not
+        that the database is slow. Check the allow-list first.
+    </p>
 
     <h2>3. Athena</h2>
     <p>
@@ -103,7 +107,36 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA &lt;schema&gt; GRANT SELECT ON TABLES TO mega
     </p>
     <p>Data in another AWS account is not supported yet.</p>
 
-    <h2>4. Connect and choose who reads it</h2>
+    <h2>4. BigQuery</h2>
+    <p>
+        One source is one dataset. Megabots authenticates with a service account key, so no IP
+        allow-list is needed.
+    </p>
+    <ol>
+        <li>
+            In the Google Cloud console open <em>IAM &amp; Admin → Service accounts</em> and create
+            one, for example <code>megabots-reader</code>.
+        </li>
+        <li>
+            Grant it <strong>BigQuery Job User</strong> on the project (it runs the queries), and
+            <strong>BigQuery Data Viewer</strong> on the dataset only (<em>BigQuery → dataset →
+            Sharing → Permissions</em>). Do not grant Data Viewer on the whole project.
+        </li>
+        <li>
+            Open the service account, <em>Keys → Add key → Create new key → JSON</em>, and download
+            it.
+        </li>
+        <li>
+            In the connect form give the project ID, the dataset ID, and paste the whole JSON file as
+            the service account key.
+        </li>
+    </ol>
+    <p>
+        Each query is capped at 10 GB scanned. Table and column descriptions set in BigQuery are read
+        into the catalog.
+    </p>
+
+    <h2>5. Connect and choose who reads it</h2>
     <p>
         <em>Data Hub → Connect source</em>, paste the URL, <em>Test connection</em>, then under
         <em>Who can read it?</em> pick the roles. The default is nobody but admins. Use the
