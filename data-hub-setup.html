@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connecting a source to Data Hub - Megabots</title>
+    <style>
+        body {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #34495e; margin-top: 22px; font-size: 1.05em; }
+        ul { margin: 10px 0; }
+        li { margin: 5px 0; }
+        a { color: #3498db; }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            background: #f4f6f8;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        pre {
+            background: #f4f6f8;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 14px 16px;
+            overflow-x: auto;
+            line-height: 1.45;
+        }
+        pre code { background: none; padding: 0; font-size: 0.85em; }
+    </style>
+</head>
+<body>
+    <h1>Connecting a source to Data Hub</h1>
+    <p>
+        Data Hub reads your database with the user you give it. Give it a user that can only read:
+        Megabots also opens every session read-only and refuses write statements, but the database
+        user is the guarantee the rest only backs up.
+    </p>
+
+    <h2>1. Create a read-only user</h2>
+
+    <h3>PostgreSQL / Aurora PostgreSQL</h3>
+    <pre><code>CREATE ROLE megabots_reader LOGIN PASSWORD '&lt;strong-password&gt;';
+ALTER ROLE megabots_reader SET default_transaction_read_only = on;
+GRANT CONNECT ON DATABASE &lt;database&gt; TO megabots_reader;
+-- Repeat per schema the assistant should see:
+GRANT USAGE ON SCHEMA &lt;schema&gt; TO megabots_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA &lt;schema&gt; TO megabots_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA &lt;schema&gt; GRANT SELECT ON TABLES TO megabots_reader;</code></pre>
+
+    <h3>MySQL / MariaDB / Aurora MySQL</h3>
+    <pre><code>CREATE USER 'megabots_reader'@'%' IDENTIFIED BY '&lt;strong-password&gt;' REQUIRE SSL;
+GRANT SELECT, SHOW VIEW ON &lt;database&gt;.* TO 'megabots_reader'@'%';</code></pre>
+
+    <h3>Redshift</h3>
+    <pre><code>CREATE USER megabots_reader PASSWORD '&lt;Strong-password1&gt;';
+GRANT USAGE ON SCHEMA &lt;schema&gt; TO megabots_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA &lt;schema&gt; TO megabots_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA &lt;schema&gt; GRANT SELECT ON TABLES TO megabots_reader;</code></pre>
+
+    <p>
+        Table and column comments (<code>COMMENT ON ...</code>) and foreign keys are read too: they
+        become the descriptions and relationships the assistant uses to write correct queries. Add
+        them where you can, or write notes in Data Hub after connecting.
+    </p>
+
+    <h2>2. Let Megabots reach it</h2>
+    <p>Megabots connects from one public IP, its NAT gateway. Find it in the Megabots account:</p>
+    <pre><code>aws ec2 describe-nat-gateways --filter Name=state,Values=available \
+  --query "NatGateways[].NatGatewayAddresses[0].PublicIp" --output text</code></pre>
+    <ul>
+        <li>
+            <strong>Public endpoint:</strong> allow that IP on the database port (security group,
+            firewall, or <code>pg_hba.conf</code>), nothing wider. TLS is required by default
+            (<code>sslmode=require</code>).
+        </li>
+        <li>
+            <strong>Private database:</strong> use an SSH bastion that the IP can reach. In the
+            connect form open <em>Advanced</em>, turn on <em>SSH bastion</em>, and give its host,
+            user and private key. Hosts that resolve to private addresses are refused unless they go
+            through a bastion.
+        </li>
+        <li>
+            A database that pauses when idle (Aurora Serverless) takes up to ~15 s to answer the
+            first connection. <em>Test connection</em> waits for it.
+        </li>
+    </ul>
+
+    <h2>3. Athena</h2>
+    <p>
+        The data must be in this deployment's <code>megabots-database-&lt;account&gt;</code> bucket,
+        with its tables in a Glue database. In the form give the region, the Glue database and the
+        workgroup (<code>primary</code> unless you made one). Query results go to Megabots' own
+        Athena results bucket.
+    </p>
+    <p>Data in another AWS account is not supported yet.</p>
+
+    <h2>4. Connect and choose who reads it</h2>
+    <p>
+        <em>Data Hub → Connect source</em>, paste the URL, <em>Test connection</em>, then under
+        <em>Who can read it?</em> pick the roles. The default is nobody but admins. Use the
+        <em>Console</em> tab to run a query as a role and see exactly what the assistant would get.
+    </p>
+
+    <p style="margin-top: 50px;"><a href="index.html">← Back to Home</a></p>
+</body>
+</html>
