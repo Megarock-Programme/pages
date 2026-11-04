@@ -136,7 +136,72 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA &lt;schema&gt; GRANT SELECT ON TABLES TO mega
         into the catalog.
     </p>
 
-    <h2>5. Connect and choose who reads it</h2>
+    <h2>5. ClickHouse</h2>
+    <p>
+        Connect by URL on the HTTPS interface: <code>clickhouse://user:password@host:8443/database</code>.
+        Add <code>?sslmode=disable</code> for a plain-HTTP server on port 8123. Megabots opens every
+        session with <code>readonly = 2</code>, which refuses writes and DDL server-side.
+    </p>
+    <pre><code>CREATE USER megabots_reader IDENTIFIED BY '&lt;strong-password&gt;' SETTINGS readonly = 2;
+GRANT SELECT ON &lt;database&gt;.* TO megabots_reader;</code></pre>
+    <p>
+        On ClickHouse Cloud, add the Megabots NAT IP (step 2) to the service's <em>IP access list</em>.
+    </p>
+
+    <h2>6. Snowflake</h2>
+    <p>
+        Megabots signs in with a key pair, so no password is stored. Snowflake has no read-only
+        session mode: the role's grants are the guarantee, so grant SELECT and nothing else.
+    </p>
+    <ol>
+        <li>Generate an unencrypted PKCS#8 key pair:
+            <pre><code>openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out megabots_key.p8 -nocrypt
+openssl rsa -in megabots_key.p8 -pubout -out megabots_key.pub</code></pre>
+        </li>
+        <li>Create the role and user, and set the public key (paste the .pub contents without the
+            BEGIN/END lines):
+            <pre><code>CREATE ROLE megabots_reader;
+GRANT USAGE ON WAREHOUSE &lt;warehouse&gt; TO ROLE megabots_reader;
+GRANT USAGE ON DATABASE &lt;database&gt; TO ROLE megabots_reader;
+GRANT USAGE ON ALL SCHEMAS IN DATABASE &lt;database&gt; TO ROLE megabots_reader;
+GRANT SELECT ON ALL TABLES IN DATABASE &lt;database&gt; TO ROLE megabots_reader;
+GRANT SELECT ON FUTURE TABLES IN DATABASE &lt;database&gt; TO ROLE megabots_reader;
+CREATE USER MEGABOTS_READER DEFAULT_ROLE = megabots_reader DEFAULT_WAREHOUSE = &lt;warehouse&gt;
+  RSA_PUBLIC_KEY = 'MIIBIjANBgkq...';
+GRANT ROLE megabots_reader TO USER MEGABOTS_READER;</code></pre>
+        </li>
+        <li>
+            In the connect form give the account as <code>orgname-accountname</code> (Snowsight →
+            account selector → <em>View account details</em>), the user, the contents of
+            <code>megabots_key.p8</code>, and the database. Schema and warehouse are optional.
+        </li>
+    </ol>
+    <p>Primary and foreign keys are informational in Snowflake, but Megabots reads them for joins.</p>
+
+    <h2>7. Databricks</h2>
+    <p>
+        Megabots connects to a SQL warehouse with an access token. Unity Catalog is required
+        (<code>hive_metastore</code> has no <code>information_schema</code> to discover from). There
+        is no read-only session mode: grant SELECT and nothing else.
+    </p>
+    <ol>
+        <li>
+            Create a service principal (<em>Settings → Identity and access</em>) and generate a token
+            for it, or use a personal access token (<em>User settings → Developer</em>).
+        </li>
+        <li>Grant it read access to the catalog:
+            <pre><code>GRANT USE CATALOG ON CATALOG &lt;catalog&gt; TO `&lt;principal&gt;`;
+GRANT USE SCHEMA, SELECT ON CATALOG &lt;catalog&gt; TO `&lt;principal&gt;`;</code></pre>
+            and <em>Can use</em> on the SQL warehouse.
+        </li>
+        <li>
+            Copy the <em>Server hostname</em> and <em>HTTP path</em> from the warehouse's
+            <em>Connection details</em> tab into the form, with the token and the catalog name.
+        </li>
+    </ol>
+    <p>A stopped warehouse starts on the first query; expect the first <em>Test</em> to take up to a minute.</p>
+
+    <h2>8. Connect and choose who reads it</h2>
     <p>
         <em>Data Hub → Connect source</em>, paste the URL, <em>Test connection</em>, then under
         <em>Who can read it?</em> pick the roles. The default is nobody but admins. Use the
