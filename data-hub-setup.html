@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connecting a source to Data Hub - Megabots</title>
+    <style>
+        body {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #34495e; margin-top: 22px; font-size: 1.05em; }
+        ul { margin: 10px 0; }
+        li { margin: 5px 0; }
+        a { color: #3498db; }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            background: #f4f6f8;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        pre {
+            background: #f4f6f8;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 14px 16px;
+            overflow-x: auto;
+            line-height: 1.45;
+        }
+        pre code { background: none; padding: 0; font-size: 0.85em; }
+    </style>
+</head>
+<body>
+    <h1>Connecting a source to Data Hub</h1>
+    <p>
+        Data Hub reads your database with the user you give it. Give it a user that can only read:
+        Megabots also opens every session read-only and refuses write statements, but the database
+        user is the guarantee the rest only backs up.
+    </p>
+
+    <h2>1. Create a read-only user</h2>
+
+    <h3>PostgreSQL / Aurora PostgreSQL</h3>
+    <pre><code>CREATE ROLE megabots_reader LOGIN PASSWORD '&lt;strong-password&gt;';
+ALTER ROLE megabots_reader SET default_transaction_read_only = on;
+GRANT CONNECT ON DATABASE &lt;database&gt; TO megabots_reader;
+-- Repeat per schema the assistant should see:
+GRANT USAGE ON SCHEMA &lt;schema&gt; TO megabots_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA &lt;schema&gt; TO megabots_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA &lt;schema&gt; GRANT SELECT ON TABLES TO megabots_reader;</code></pre>
+
+    <h3>MySQL / MariaDB / Aurora MySQL</h3>
+    <pre><code>CREATE USER 'megabots_reader'@'%' IDENTIFIED BY '&lt;strong-password&gt;' REQUIRE SSL;
+GRANT SELECT, SHOW VIEW ON &lt;database&gt;.* TO 'megabots_reader'@'%';</code></pre>
+
+    <h3>Redshift</h3>
+    <pre><code>CREATE USER megabots_reader PASSWORD '&lt;Strong-password1&gt;';
+GRANT USAGE ON SCHEMA &lt;schema&gt; TO megabots_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA &lt;schema&gt; TO megabots_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA &lt;schema&gt; GRANT SELECT ON TABLES TO megabots_reader;</code></pre>
+
+    <p>
+        Table and column comments (<code>COMMENT ON ...</code>) and foreign keys are read too: they
+        become the descriptions and relationships the assistant uses to write correct queries. Add
+        them where you can, or write notes in Data Hub after connecting.
+    </p>
+
+    <h2>2. Let Megabots reach it</h2>
+    <p>Megabots connects from one public IP, its NAT gateway. Find it in the Megabots account:</p>
+    <pre><code>aws ec2 describe-nat-gateways --filter Name=state,Values=available \
+  --query "NatGateways[].NatGatewayAddresses[0].PublicIp" --output text</code></pre>
+    <ul>
+        <li>
+            <strong>Public endpoint:</strong> allow that IP on the database port (security group,
+            firewall, or <code>pg_hba.conf</code>), nothing wider. TLS is required by default
+            (<code>sslmode=require</code>).
+        </li>
+        <li>
+            <strong>Private database:</strong> use an SSH bastion that the IP can reach. In the
+            connect form open <em>Advanced</em>, turn on <em>SSH bastion</em>, and give its host,
+            user and private key. Hosts that resolve to private addresses are refused unless they go
+            through a bastion.
+        </li>
+        <li>
+            A database that pauses when idle (Aurora Serverless) takes up to ~15 s to answer the
+            first connection. <em>Test connection</em> waits for it.
+        </li>
+    </ul>
+    <p>
+        A connection that <em>times out</em> usually means the firewall is dropping the request, not
+        that the database is slow. Check the allow-list first.
+    </p>
+
+    <h2>3. Athena</h2>
+    <p>
+        The data must be in this deployment's <code>megabots-database-&lt;account&gt;</code> bucket,
+        with its tables in a Glue database. In the form give the region, the Glue database and the
+        workgroup (<code>primary</code> unless you made one). Query results go to Megabots' own
+        Athena results bucket.
+    </p>
+    <p>Data in another AWS account is not supported yet.</p>
+
+    <h2>4. BigQuery</h2>
+    <p>
+        One source is one dataset. Megabots authenticates with a service account key, so no IP
+        allow-list is needed.
+    </p>
+    <ol>
+        <li>
+            In the Google Cloud console open <em>IAM &amp; Admin → Service accounts</em> and create
+            one, for example <code>megabots-reader</code>.
+        </li>
+        <li>
+            Grant it <strong>BigQuery Job User</strong> on the project (it runs the queries), and
+            <strong>BigQuery Data Viewer</strong> on the dataset only (<em>BigQuery → dataset →
+            Sharing → Permissions</em>). Do not grant Data Viewer on the whole project.
+        </li>
+        <li>
+            Open the service account, <em>Keys → Add key → Create new key → JSON</em>, and download
+            it.
+        </li>
+        <li>
+            In the connect form give the project ID, the dataset ID, and paste the whole JSON file as
+            the service account key.
+        </li>
+    </ol>
+    <p>
+        Each query is capped at 10 GB scanned. Table and column descriptions set in BigQuery are read
+        into the catalog.
+    </p>
+
+    <h2>5. ClickHouse</h2>
+    <p>
+        Connect by URL on the HTTPS interface: <code>clickhouse://user:password@host:8443/database</code>.
+        Add <code>?sslmode=disable</code> for a plain-HTTP server on port 8123. Megabots opens every
+        session with <code>readonly = 2</code>, which refuses writes and DDL server-side.
+    </p>
+    <pre><code>CREATE USER megabots_reader IDENTIFIED BY '&lt;strong-password&gt;' SETTINGS readonly = 2;
+GRANT SELECT ON &lt;database&gt;.* TO megabots_reader;</code></pre>
+    <p>
+        On ClickHouse Cloud, add the Megabots NAT IP (step 2) to the service's <em>IP access list</em>.
+    </p>
+
+    <h2>6. Snowflake</h2>
+    <p>
+        Megabots signs in with a key pair, so no password is stored. Snowflake has no read-only
+        session mode: the role's grants are the guarantee, so grant SELECT and nothing else.
+    </p>
+    <ol>
+        <li>Generate an unencrypted PKCS#8 key pair:
+            <pre><code>openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out megabots_key.p8 -nocrypt
+openssl rsa -in megabots_key.p8 -pubout -out megabots_key.pub</code></pre>
+        </li>
+        <li>Create the role and user, and set the public key (paste the .pub contents without the
+            BEGIN/END lines):
+            <pre><code>CREATE ROLE megabots_reader;
+GRANT USAGE ON WAREHOUSE &lt;warehouse&gt; TO ROLE megabots_reader;
+GRANT USAGE ON DATABASE &lt;database&gt; TO ROLE megabots_reader;
+GRANT USAGE ON ALL SCHEMAS IN DATABASE &lt;database&gt; TO ROLE megabots_reader;
+GRANT SELECT ON ALL TABLES IN DATABASE &lt;database&gt; TO ROLE megabots_reader;
+GRANT SELECT ON FUTURE TABLES IN DATABASE &lt;database&gt; TO ROLE megabots_reader;
+CREATE USER MEGABOTS_READER DEFAULT_ROLE = megabots_reader DEFAULT_WAREHOUSE = &lt;warehouse&gt;
+  RSA_PUBLIC_KEY = 'MIIBIjANBgkq...';
+GRANT ROLE megabots_reader TO USER MEGABOTS_READER;</code></pre>
+        </li>
+        <li>
+            In the connect form give the account as <code>orgname-accountname</code> (Snowsight →
+            account selector → <em>View account details</em>), the user, the contents of
+            <code>megabots_key.p8</code>, and the database. Schema and warehouse are optional.
+        </li>
+    </ol>
+    <p>Primary and foreign keys are informational in Snowflake, but Megabots reads them for joins.</p>
+
+    <h2>7. Databricks</h2>
+    <p>
+        Megabots connects to a SQL warehouse with an access token. Unity Catalog is required
+        (<code>hive_metastore</code> has no <code>information_schema</code> to discover from). There
+        is no read-only session mode: grant SELECT and nothing else.
+    </p>
+    <ol>
+        <li>
+            Create a service principal (<em>Settings → Identity and access</em>) and generate a token
+            for it, or use a personal access token (<em>User settings → Developer</em>).
+        </li>
+        <li>Grant it read access to the catalog:
+            <pre><code>GRANT USE CATALOG ON CATALOG &lt;catalog&gt; TO `&lt;principal&gt;`;
+GRANT USE SCHEMA, SELECT ON CATALOG &lt;catalog&gt; TO `&lt;principal&gt;`;</code></pre>
+            and <em>Can use</em> on the SQL warehouse.
+        </li>
+        <li>
+            Copy the <em>Server hostname</em> and <em>HTTP path</em> from the warehouse's
+            <em>Connection details</em> tab into the form, with the token and the catalog name.
+        </li>
+    </ol>
+    <p>A stopped warehouse starts on the first query; expect the first <em>Test</em> to take up to a minute.</p>
+
+    <h2>8. Qdrant (knowledge)</h2>
+    <p>
+        A knowledge source is searched by meaning, not SQL. Megabots embeds each question with a
+        Bedrock model and asks Qdrant for the nearest chunks, so the collection must have been built
+        with the <strong>same model and vector size</strong>. <em>Test</em> refuses a size that does
+        not match the collection. Supported: Titan Text Embeddings V2 (1024/512/256), Cohere Embed
+        Multilingual v3 (1024), Cohere Embed v4 (1536/1024/512/256). A collection embedded with
+        another model (OpenAI, a local model) cannot be connected yet.
+    </p>
+    <ol>
+        <li>
+            Create a read-only API key. In Qdrant Cloud: <em>Access management → Database API keys →
+            Create</em>, role <strong>Read only</strong>, scoped to the collection if you like.
+        </li>
+        <li>
+            Note the payload keys that hold each chunk's text (required), and optionally its title
+            and a source URL or document name. Megabots samples twenty points on connect and lists
+            every payload key as a filterable field.
+        </li>
+        <li>
+            In the connect form give the endpoint (<code>https://xxxx.cloud.qdrant.io:6333</code>; a
+            plain <code>http://</code> address means a local server), the API key, the collection,
+            the embedding model and size, and the field names.
+        </li>
+    </ol>
+    <p>
+        Megabots never writes to the collection. Bedrock knowledge bases are managed in
+        <em>Settings → Knowledge Base</em>, not here.
+    </p>
+
+    <h2>9. Other vector stores (knowledge)</h2>
+    <p>
+        The same rule applies to every knowledge source: the index must have been built with one of
+        the Bedrock embedding models above, and <em>Test</em> checks the vector size. Filters are
+        exact-match on payload fields.
+    </p>
+    <h3>PostgreSQL with pgvector</h3>
+    <p>
+        Connect by URL like any Postgres source (step 1 and 2 apply), then name the table
+        (<code>schema.table</code>) and the <code>vector(N)</code> column. Every other column of the
+        table becomes a filterable field. Search ranks by cosine distance (<code>&lt;=&gt;</code>); a
+        matching <code>vector_cosine_ops</code> index keeps it fast. The read-only user needs SELECT
+        on the table only.
+    </p>
+    <h3>Amazon OpenSearch</h3>
+    <p>
+        Serverless collections (<code>*.aoss.amazonaws.com</code>) and domains are both supported.
+        Megabots signs requests with its own IAM role. For a Serverless collection, add that role to the
+        collection's <em>data access policy</em> with <code>aoss:ReadDocument</code> and
+        <code>aoss:DescribeIndex</code>; for a domain, allow it in the domain access policy. A domain
+        with fine-grained access control may instead take a user and password. The endpoint must be
+        public; a VPC-only domain cannot be reached. Give the index name and the <code>knn_vector</code>
+        field. An index created by a Bedrock knowledge base uses
+        <code>bedrock-knowledge-base-default-vector</code> for the vector and
+        <code>AMAZON_BEDROCK_TEXT_CHUNK</code> for the text.
+    </p>
+    <h3>Amazon S3 Vectors</h3>
+    <p>
+        Give the region, the vector bucket and the index. Megabots reads with its own IAM role, so the
+        bucket must be in the Megabots account (another account is not supported yet). Metadata keys
+        marked non-filterable when the index was created cannot be used in filters. A Bedrock
+        knowledge base on S3 Vectors stores the text under <code>AMAZON_BEDROCK_TEXT</code>.
+    </p>
+
+    <h2>10. Connect and choose who reads it</h2>
+    <p>
+        <em>Data Hub → Connect source</em>, paste the URL, <em>Test connection</em>, then under
+        <em>Who can read it?</em> pick the roles. The default is nobody but admins. Use the
+        <em>Console</em> tab to run a query as a role and see exactly what the assistant would get.
+    </p>
+
+    <p style="margin-top: 50px;"><a href="index.html">← Back to Home</a></p>
+</body>
+</html>
