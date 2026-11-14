@@ -1,0 +1,55 @@
+# Privacy Policy
+
+**Last Updated:** [DATE]
+
+## 1. Introduction
+[Company Name] ("we", "our", "us") operates the Megabots AI Agent integration for Notion.
+
+## 2. Data We Access
+- Notion pages and databases you explicitly grant access to
+- Page content, properties, and metadata
+- User information (name, email) for authentication
+
+## 3. How We Use Data
+- Process AI agent requests within your Notion workspace
+- Temporary processing in memory only
+- No persistent storage of workspace content
+
+## 4. Data Storage
+- OAuth tokens: Encrypted storage (AWS Secrets Manager/DynamoDB)
+- Session data: Temporary (AWS Lambda execution context)
+- Logs: Anonymized, no PII (CloudWatch, 30-day retention)
+
+## 5. Data Sharing
+- AWS Bedrock: For AI model inference (encrypted in transit)
+- No third-party sharing for marketing/analytics
+- No sale of user data
+
+## 6. Data Security
+- Encryption in transit (TLS 1.3)
+- Encryption at rest (AWS KMS)
+- Regular security audits
+- Access controls and monitoring
+
+## 7. Data Retention
+- OAuth tokens: Until revoked by user
+- Session data: Deleted after request completion
+- Logs: 30 days maximum
+
+## 8. User Rights
+- Revoke access anytime via Notion settings
+- Request data deletion: [email]
+- Export data: Available via Notion export
+
+## 9. Compliance
+- GDPR compliant (EU users)
+- CCPA compliant (California users)
+- SOC 2 Type II (via AWS infrastructure)
+
+## 10. Changes to Policy
+We will notify users of material changes via email or Notion notification.
+
+## 11. Contact
+- Email: privacy@yourdomain.com
+- Address: [Your Company Address]
+- Data Protection Officer: [If applicable]

@@ -231,7 +231,41 @@ GRANT USE SCHEMA, SELECT ON CATALOG &lt;catalog&gt; TO `&lt;principal&gt;`;</cod
         <em>Settings → Knowledge Base</em>, not here.
     </p>
 
-    <h2>9. Connect and choose who reads it</h2>
+    <h2>9. Other vector stores (knowledge)</h2>
+    <p>
+        The same rule applies to every knowledge source: the index must have been built with one of
+        the Bedrock embedding models above, and <em>Test</em> checks the vector size. Filters are
+        exact-match on payload fields.
+    </p>
+    <h3>PostgreSQL with pgvector</h3>
+    <p>
+        Connect by URL like any Postgres source (step 1 and 2 apply), then name the table
+        (<code>schema.table</code>) and the <code>vector(N)</code> column. Every other column of the
+        table becomes a filterable field. Search ranks by cosine distance (<code>&lt;=&gt;</code>); a
+        matching <code>vector_cosine_ops</code> index keeps it fast. The read-only user needs SELECT
+        on the table only.
+    </p>
+    <h3>Amazon OpenSearch</h3>
+    <p>
+        Serverless collections (<code>*.aoss.amazonaws.com</code>) and domains are both supported.
+        Megabots signs requests with its own IAM role. For a Serverless collection, add that role to the
+        collection's <em>data access policy</em> with <code>aoss:ReadDocument</code> and
+        <code>aoss:DescribeIndex</code>; for a domain, allow it in the domain access policy. A domain
+        with fine-grained access control may instead take a user and password. The endpoint must be
+        public; a VPC-only domain cannot be reached. Give the index name and the <code>knn_vector</code>
+        field. An index created by a Bedrock knowledge base uses
+        <code>bedrock-knowledge-base-default-vector</code> for the vector and
+        <code>AMAZON_BEDROCK_TEXT_CHUNK</code> for the text.
+    </p>
+    <h3>Amazon S3 Vectors</h3>
+    <p>
+        Give the region, the vector bucket and the index. Megabots reads with its own IAM role, so the
+        bucket must be in the Megabots account (another account is not supported yet). Metadata keys
+        marked non-filterable when the index was created cannot be used in filters. A Bedrock
+        knowledge base on S3 Vectors stores the text under <code>AMAZON_BEDROCK_TEXT</code>.
+    </p>
+
+    <h2>10. Connect and choose who reads it</h2>
     <p>
         <em>Data Hub → Connect source</em>, paste the URL, <em>Test connection</em>, then under
         <em>Who can read it?</em> pick the roles. The default is nobody but admins. Use the
